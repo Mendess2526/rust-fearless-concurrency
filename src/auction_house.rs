@@ -43,6 +43,10 @@ impl AuctionHouse {
         &self.stock
     }
 
+    pub fn ls_m(&self, clt :&str) -> Vec<&Droplet> {
+        self.reserved.iter().filter(|d| d.owner() == clt).collect()
+    }
+
     pub fn buy(&mut self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
         if !self.clients.contains_key(clt) {
             return Err(AuctionError::InvalidClient(clt.into()))
@@ -71,12 +75,19 @@ impl AuctionHouse {
             .or_insert(vec![Item::new(server_type)]);
     }
 
-    pub fn register(&mut self, email :String, password :String) -> Result<(), ClientError> {
-        if self.clients.contains_key(&email) {
-            Err(ClientError::EmailTaken(email))
+    pub fn register(&mut self, email :&str, password :&str) -> Result<(), ClientError> {
+        if self.clients.contains_key(email) {
+            Err(ClientError::EmailTaken(email.to_string()))
         }else{
-            self.clients.insert(email.clone(), Client::new(email, password));
+            self.clients.insert(
+                email.to_string(),
+                Client::new(email.to_string(), password.to_string())
+            );
             Ok(())
         }
+    }
+
+    pub fn login(&self, email: &str, password :&str) -> bool {
+        self.clients.get(email).map(|c| c.password() == password).unwrap_or(false)
     }
 }

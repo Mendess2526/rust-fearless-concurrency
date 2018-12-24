@@ -1,5 +1,5 @@
 [package]
-name = "SD-rust"
+name = "sd-rust"
 version = "0.1.0"
 authors = ["Mendess2526 <pedro.mendes.26@gmail.com>"]
 edition = "2018"

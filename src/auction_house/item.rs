@@ -19,10 +19,6 @@ impl Item {
     pub fn server_type(&self) -> ServerType {
         self.tp
     }
-
-    pub fn price(&self) -> i32 {
-        self.tp.price()
-    }
 }
 
 #[derive(Debug,Copy,Clone,PartialEq,PartialOrd,Eq,Ord,Hash)]
@@ -36,6 +32,14 @@ impl ServerType {
         match self {
             ServerType::Slow => 20,
             ServerType::Fast => 40,
+        }
+    }
+
+    pub fn from_str(s :&str) -> Option<Self> {
+        match s {
+            "Fast" => Some(ServerType::Fast),
+            "Slow" => Some(ServerType::Slow),
+            &_ => None,
         }
     }
 }

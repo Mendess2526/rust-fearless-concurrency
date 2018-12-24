@@ -1,5 +1,5 @@
 use super::client::Client;
-use super::item::Item;
+use super::item::{Item, ServerType};
 
 #[derive(Debug)]
 pub struct Droplet {
@@ -13,5 +13,13 @@ impl Droplet {
             item,
             owner :owner.email().to_string(),
         }
+    }
+
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn server_type(&self) -> ServerType {
+        self.item.server_type()
     }
 }
