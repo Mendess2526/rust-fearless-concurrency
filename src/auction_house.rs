@@ -9,14 +9,14 @@ use self::droplet::Droplet;
 use self::item::{Item, ServerType};
 use self::topbid::TopBid;
 
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 #[derive(Debug)]
 pub struct AuctionHouse {
-    stock :Mutex<HashMap<ServerType, Vec<Item>>>,
-    auctions :Mutex<Vec<TopBid>>,
-    reserved :Mutex<Vec<Droplet>>,
-    clients :Mutex<HashMap<String, Client>>,
+    stock :RwLock<HashMap<ServerType, Vec<Item>>>,
+    auctions :RwLock<Vec<TopBid>>,
+    reserved :RwLock<Vec<Droplet>>,
+    clients :RwLock<HashMap<String, Client>>,
 }
 
 #[derive(Debug)]
@@ -34,26 +34,26 @@ pub enum ClientError {
 impl AuctionHouse {
     pub fn new() -> Self{
         AuctionHouse {
-            stock: Mutex::new(HashMap::new()),
-            auctions :Mutex::new(vec![]),
-            reserved :Mutex::new(vec![]),
-            clients :Mutex::new(HashMap::new()),
+            stock: RwLock::new(HashMap::new()),
+            auctions :RwLock::new(vec![]),
+            reserved :RwLock::new(vec![]),
+            clients :RwLock::new(HashMap::new()),
         }
     }
 
     pub fn ls(&self) -> Vec<(ServerType, usize)> {
-        self.stock.lock().unwrap()
+        self.stock.read().unwrap()
             .iter()
             .map(|(k, v)| (*k, v.len()))
             .collect()
     }
 
     pub fn ls_m(&self, clt :&str) -> Vec<Droplet> {
-        self.reserved.lock().unwrap().iter().filter(|d| d.owner() == clt).cloned().collect()
+        self.reserved.read().unwrap().iter().filter(|d| d.owner() == clt).cloned().collect()
     }
 
     pub fn buy(&self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
-        let mut clients = self.clients.lock().unwrap();
+        let mut clients = self.clients.write().unwrap();
         if !clients.contains_key(clt) {
             return Err(AuctionError::InvalidClient(clt.into()))
         };
@@ -61,7 +61,7 @@ impl AuctionHouse {
         if sv_tp.price() > client.funds() {
             return Err(AuctionError::NotEnughFunds(sv_tp.price(), client.funds()))
         }
-        let mut stock = self.stock.lock().unwrap();
+        let mut stock = self.stock.write().unwrap();
         match stock.get_mut(&sv_tp) {
             None => Err(AuctionError::OutOfStock(sv_tp)),
             Some(v) => {
@@ -69,7 +69,7 @@ impl AuctionHouse {
                     Err(AuctionError::OutOfStock(sv_tp))
                 }else{
                     client.spend(sv_tp.price());
-                    let mut reserved = self.reserved.lock().unwrap();
+                    let mut reserved = self.reserved.write().unwrap();
                     reserved.push(Droplet::new(v.pop().unwrap(), client));
                     Ok(())
                 }
@@ -78,14 +78,14 @@ impl AuctionHouse {
     }
     pub fn add(&self, server_type :ServerType) {
         self.stock
-            .lock().unwrap()
+            .write().unwrap()
             .entry(server_type)
             .and_modify(|v| v.push(Item::new(server_type)))
             .or_insert(vec![Item::new(server_type)]);
     }
 
     pub fn register(&self, email :&str, password :&str) -> Result<(), ClientError> {
-        let mut clients = self.clients.lock().unwrap();
+        let mut clients = self.clients.write().unwrap();
         if clients.contains_key(email) {
             Err(ClientError::EmailTaken(email.to_string()))
         }else{
@@ -98,10 +98,10 @@ impl AuctionHouse {
     }
 
     pub fn login(&self, email: &str, password :&str) -> bool {
-        self.clients.lock().unwrap().get(email).map(|c| c.password() == password).unwrap_or(false)
+        self.clients.read().unwrap().get(email).map(|c| c.password() == password).unwrap_or(false)
     }
 
     pub fn profile(&self, ctl :&str) -> Option<Client> {
-        self.clients.lock().unwrap().get(ctl).cloned()
+        self.clients.read().unwrap().get(ctl).cloned()
     }
 }
