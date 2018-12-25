@@ -97,6 +97,12 @@ impl Runner {
                     Ok(_) => unreachable!(),
                 }
             }
+            "drop" => {
+                match Command::drop_server(&command[1..], &self.auction_house, &self.user) {
+                    Err(e) => format!("{}", e),
+                    Ok(_) => "Server removed successfully".into(),
+                }
+            }
             s => format!("Command not found: {}", s),
         }
     }
@@ -161,10 +167,11 @@ impl Command {
             if user.is_none() {
                 Err(CommandError("You must be logged in to use this!".into()))
             } else {
-                Ok(Command::Ls(format!("{:?}", ah.ls_m(user.as_ref().unwrap())
-                                       .iter()
-                                       .map(|d| d.server_type())
-                                       .collect::<Vec<ServerType>>())
+                Ok(Command::Ls("ID\tType\n============\n".to_string()
+                               + &ah.ls_m(user.as_ref().unwrap())
+                               .iter()
+                               .map(|d| format!("{}\t{:?}\n", d.id(), d.server_type()))
+                               .fold(String::new(), |x, acc| acc + &x)
                               ))
             }
         } else {
@@ -208,13 +215,21 @@ impl Command {
         }
     }
 
-    fn drop(ah :&Arc<AuctionHouse>, user :&Option<String>, id :u32) -> CommandResult {
+    fn drop_server(args :&[&str], ah :&Arc<AuctionHouse>, user :&Option<String>) -> CommandResult {
         if user.is_none() { Err(CommandError("You must be logged in to use this!".into())) }
+        else if args.len() < 1 { Err(CommandError("Usage: drop <id>".into())) }
         else {
-            if ah.drop(user.as_ref().unwrap(), id) {
-                Ok(Command::DropServer)
-            } else {
-                Err(CommandError("Invalid Server id".into()))
+            let id = args[0].parse::<u32>();
+            match id {
+                Err(_) => Err(CommandError(format!("Invalid id: {}", args[0]))),
+                Ok(id) => {
+                    if ah.drop_server(user.as_ref().unwrap(), id) {
+                        Ok(Command::DropServer)
+                    } else {
+                        Err(CommandError("Invalid Server id".into()))
+                    }
+
+                }
             }
         }
     }

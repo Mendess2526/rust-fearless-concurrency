@@ -83,6 +83,7 @@ impl AuctionHouse {
             }
         }
     }
+
     pub fn add(&self, server_type :ServerType) {
         self.stock
             .write().unwrap()
@@ -112,22 +113,19 @@ impl AuctionHouse {
         self.clients.read().unwrap().get(ctl).cloned()
     }
 
-    pub fn drop(&self, ctl :&str, id :u32) -> bool {
+    pub fn drop_server(&self, ctl :&str, id :u32) -> bool {
         let droplet =
         {
             let mut reserved = self.reserved.write().unwrap();
-            match reserved.get(id) {
-                None => return false,
-                Some(d) => if d.owner() != ctl {
-                    return false
-                } else {
-                    d
-                }
+            if !reserved.contains_key(&id) || reserved[&id].owner() != ctl {
+                return false
+            } else {
+                reserved.remove(&id).unwrap()
             }
         };
         self.stock.write().unwrap()
             .entry(droplet.server_type())
-            .and_modify(|c| *c =+ 1)
+            .and_modify(|c| *c += 1)
             .or_insert(1);
         true
     }
