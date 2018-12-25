@@ -7,8 +7,10 @@ use self::client::Client;
 use self::droplet::Droplet;
 use self::server_type::ServerType;
 use self::topbid::TopBid;
+use crate::task::Task;
 
 use std::sync::RwLock;
+use std::sync::Arc;
 use std::collections::HashMap;
 
 type Stock = HashMap<ServerType, u32>;
@@ -18,9 +20,9 @@ type Clients = HashMap<String, Client>;
 
 #[derive(Debug)]
 pub struct AuctionHouse {
-    stock :RwLock<Stock>,
+    stock :Arc<RwLock<Stock>>,
     auctions :RwLock<Auctions>,
-    reserved :RwLock<Reservations>,
+    reserved :Arc<RwLock<Reservations>>,
     clients :RwLock<Clients>,
 }
 
@@ -39,9 +41,9 @@ pub enum ClientError {
 impl AuctionHouse {
     pub fn new() -> Self{
         AuctionHouse {
-            stock: RwLock::new(HashMap::new()),
+            stock: Arc::new(RwLock::new(HashMap::new())), // change to Arc Weak
             auctions :RwLock::new(HashMap::new()),
-            reserved :RwLock::new(HashMap::new()),
+            reserved :Arc::new(RwLock::new(HashMap::new())),
             clients :RwLock::new(HashMap::new()),
         }
     }
@@ -75,7 +77,17 @@ impl AuctionHouse {
                 }else{
                     client.spend(sv_tp.price());
                     let mut reserved = self.reserved.write().unwrap();
-                    let new_drop = Droplet::new(sv_tp, client);
+                    let mut new_drop = Droplet::new(sv_tp, client);
+                    if sv_tp == ServerType::Fast {
+                        let id = new_drop.id();
+                        let stock_ptr = Arc::clone(&self.stock);
+                        let reserved_ptr = Arc::clone(&self.reserved);
+                        new_drop.set_task(
+                            Task::new(
+                                move || drop_server_unchecked(reserved_ptr, stock_ptr, id),
+                                10)
+                            );
+                    }
                     reserved.insert(new_drop.id(), new_drop);
                     *v -= 1;
                     Ok(())
@@ -97,9 +109,8 @@ impl AuctionHouse {
         if clients.contains_key(email) {
             Err(ClientError::EmailTaken(email.to_string()))
         }else{
-            clients.insert(
-                email.to_string(),
-                Client::new(email.to_string(), password.to_string())
+            clients.insert( email.to_string(),
+            Client::new(email.to_string(), password.to_string())
             );
             Ok(())
         }
@@ -129,4 +140,17 @@ impl AuctionHouse {
             .or_insert(1);
         true
     }
+
+}
+fn drop_server_unchecked(reserved :Arc<RwLock<Reservations>>, stock :Arc<RwLock<Stock>>, id :u32) {
+    let droplet = {
+        match reserved.write().unwrap().remove(&id) {
+            None => return,
+            Some(d) => d,
+        }
+    };
+    stock.write().unwrap()
+        .entry(droplet.server_type())
+        .and_modify(|c| *c += 1)
+        .or_insert(1);
 }

@@ -1,4 +1,5 @@
 mod auction_house;
+mod task;
 
 use crate::auction_house::{AuctionHouse, ClientError, server_type::ServerType};
 
@@ -167,10 +168,17 @@ impl Command {
             if user.is_none() {
                 Err(CommandError("You must be logged in to use this!".into()))
             } else {
-                Ok(Command::Ls("ID\tType\n============\n".to_string()
+                Ok(Command::Ls("ID\tType\tTime left\n=========================\n".to_string()
                                + &ah.ls_m(user.as_ref().unwrap())
                                .iter()
-                               .map(|d| format!("{}\t{:?}\n", d.id(), d.server_type()))
+                               .map(|d|
+                                    format!("{}\t{:?}\t{}\n",
+                                            d.id(),
+                                            d.server_type(),
+                                            d.delay()
+                                             .map(|t| t.to_string())
+                                             .unwrap_or("∞".into()))
+                                )
                                .fold(String::new(), |x, acc| acc + &x)
                               ))
             }
