@@ -1,22 +1,27 @@
-pub mod item;
+pub mod server_type;
 mod client;
 mod droplet;
 mod topbid;
 
-use std::collections::HashMap;
 use self::client::Client;
 use self::droplet::Droplet;
-use self::item::{Item, ServerType};
+use self::server_type::ServerType;
 use self::topbid::TopBid;
 
 use std::sync::RwLock;
+use std::collections::HashMap;
+
+type Stock = HashMap<ServerType, u32>;
+type Auctions = HashMap<String, TopBid>;
+type Reservations = HashMap<u32, Droplet>;
+type Clients = HashMap<String, Client>;
 
 #[derive(Debug)]
 pub struct AuctionHouse {
-    stock :RwLock<HashMap<ServerType, Vec<Item>>>,
-    auctions :RwLock<Vec<TopBid>>,
-    reserved :RwLock<Vec<Droplet>>,
-    clients :RwLock<HashMap<String, Client>>,
+    stock :RwLock<Stock>,
+    auctions :RwLock<Auctions>,
+    reserved :RwLock<Reservations>,
+    clients :RwLock<Clients>,
 }
 
 #[derive(Debug)]
@@ -35,21 +40,21 @@ impl AuctionHouse {
     pub fn new() -> Self{
         AuctionHouse {
             stock: RwLock::new(HashMap::new()),
-            auctions :RwLock::new(vec![]),
-            reserved :RwLock::new(vec![]),
+            auctions :RwLock::new(HashMap::new()),
+            reserved :RwLock::new(HashMap::new()),
             clients :RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn ls(&self) -> Vec<(ServerType, usize)> {
+    pub fn ls(&self) -> Vec<(ServerType, u32)> {
         self.stock.read().unwrap()
             .iter()
-            .map(|(k, v)| (*k, v.len()))
+            .map(|(k, v)| (*k, *v))
             .collect()
     }
 
     pub fn ls_m(&self, clt :&str) -> Vec<Droplet> {
-        self.reserved.read().unwrap().iter().filter(|d| d.owner() == clt).cloned().collect()
+        self.reserved.read().unwrap().values().filter(|d| d.owner() == clt).cloned().collect()
     }
 
     pub fn buy(&self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
@@ -65,12 +70,14 @@ impl AuctionHouse {
         match stock.get_mut(&sv_tp) {
             None => Err(AuctionError::OutOfStock(sv_tp)),
             Some(v) => {
-                if v.is_empty() {
+                if *v == 0 {
                     Err(AuctionError::OutOfStock(sv_tp))
                 }else{
                     client.spend(sv_tp.price());
                     let mut reserved = self.reserved.write().unwrap();
-                    reserved.push(Droplet::new(v.pop().unwrap(), client));
+                    let new_drop = Droplet::new(sv_tp, client);
+                    reserved.insert(new_drop.id(), new_drop);
+                    *v -= 1;
                     Ok(())
                 }
             }
@@ -80,8 +87,8 @@ impl AuctionHouse {
         self.stock
             .write().unwrap()
             .entry(server_type)
-            .and_modify(|v| v.push(Item::new(server_type)))
-            .or_insert(vec![Item::new(server_type)]);
+            .and_modify(|v| *v += 1)
+            .or_insert(1);
     }
 
     pub fn register(&self, email :&str, password :&str) -> Result<(), ClientError> {

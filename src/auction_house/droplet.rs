@@ -1,18 +1,28 @@
 use super::client::Client;
-use super::item::{Item, ServerType};
+use super::server_type::ServerType;
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static ID :AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone)]
 pub struct Droplet {
-    item :Item,
+    id :u32,
+    tp :ServerType,
     owner :String,
 }
 
 impl Droplet {
-    pub fn new(item :Item, owner :&Client) -> Self {
+    pub fn new(tp :ServerType, owner :&Client) -> Self {
         Droplet {
-            item,
+            tp,
+            id : ID.fetch_add(1, Ordering::SeqCst) as u32,
             owner :owner.email().to_string(),
         }
+    }
+
+    pub fn id(&self) -> u32 {
+        self.id
     }
 
     pub fn owner(&self) -> &str {
@@ -20,6 +30,6 @@ impl Droplet {
     }
 
     pub fn server_type(&self) -> ServerType {
-        self.item.server_type()
+        self.tp
     }
 }

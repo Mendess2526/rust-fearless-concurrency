@@ -1,6 +1,6 @@
 mod auction_house;
 
-use crate::auction_house::{AuctionHouse, ClientError, item::ServerType};
+use crate::auction_house::{AuctionHouse, ClientError, server_type::ServerType};
 
 use std::io::{self, Read, Write};
 use std::str::FromStr;
