@@ -1,7 +1,7 @@
 use super::client::Client;
 use super::item::{Item, ServerType};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Droplet {
     item :Item,
     owner :String,

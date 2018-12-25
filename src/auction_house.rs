@@ -9,12 +9,14 @@ use self::droplet::Droplet;
 use self::item::{Item, ServerType};
 use self::topbid::TopBid;
 
+use std::sync::Mutex;
+
 #[derive(Debug)]
 pub struct AuctionHouse {
-    stock :HashMap<ServerType, Vec<Item>>,
-    auctions :Vec<TopBid>,
-    reserved :Vec<Droplet>,
-    clients: HashMap<String, Client>,
+    stock :Mutex<HashMap<ServerType, Vec<Item>>>,
+    auctions :Mutex<Vec<TopBid>>,
+    reserved :Mutex<Vec<Droplet>>,
+    clients :Mutex<HashMap<String, Client>>,
 }
 
 #[derive(Debug)]
@@ -32,54 +34,62 @@ pub enum ClientError {
 impl AuctionHouse {
     pub fn new() -> Self{
         AuctionHouse {
-            stock: HashMap::new(),
-            auctions :vec![],
-            reserved :vec![],
-            clients :HashMap::new(),
+            stock: Mutex::new(HashMap::new()),
+            auctions :Mutex::new(vec![]),
+            reserved :Mutex::new(vec![]),
+            clients :Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn ls(&self) -> &HashMap<ServerType, Vec<Item>> {
-        &self.stock
+    pub fn ls(&self) -> Vec<(ServerType, usize)> {
+        self.stock.lock().unwrap()
+            .iter()
+            .map(|(k, v)| (*k, v.len()))
+            .collect()
     }
 
-    pub fn ls_m(&self, clt :&str) -> Vec<&Droplet> {
-        self.reserved.iter().filter(|d| d.owner() == clt).collect()
+    pub fn ls_m(&self, clt :&str) -> Vec<Droplet> {
+        self.reserved.lock().unwrap().iter().filter(|d| d.owner() == clt).cloned().collect()
     }
 
-    pub fn buy(&mut self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
-        if !self.clients.contains_key(clt) {
+    pub fn buy(&self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
+        let mut clients = self.clients.lock().unwrap();
+        if !clients.contains_key(clt) {
             return Err(AuctionError::InvalidClient(clt.into()))
         };
-        let client = self.clients.get_mut(clt).unwrap();
+        let client = clients.get_mut(clt).unwrap();
         if sv_tp.price() > client.funds() {
             return Err(AuctionError::NotEnughFunds(sv_tp.price(), client.funds()))
         }
-        match self.stock.get_mut(&sv_tp) {
+        let mut stock = self.stock.lock().unwrap();
+        match stock.get_mut(&sv_tp) {
             None => Err(AuctionError::OutOfStock(sv_tp)),
             Some(v) => {
                 if v.is_empty() {
                     Err(AuctionError::OutOfStock(sv_tp))
                 }else{
                     client.spend(sv_tp.price());
-                    self.reserved.push(Droplet::new(v.pop().unwrap(), client));
+                    let mut reserved = self.reserved.lock().unwrap();
+                    reserved.push(Droplet::new(v.pop().unwrap(), client));
                     Ok(())
                 }
             }
         }
     }
-    pub fn add(&mut self, server_type :ServerType) {
+    pub fn add(&self, server_type :ServerType) {
         self.stock
+            .lock().unwrap()
             .entry(server_type)
             .and_modify(|v| v.push(Item::new(server_type)))
             .or_insert(vec![Item::new(server_type)]);
     }
 
-    pub fn register(&mut self, email :&str, password :&str) -> Result<(), ClientError> {
-        if self.clients.contains_key(email) {
+    pub fn register(&self, email :&str, password :&str) -> Result<(), ClientError> {
+        let mut clients = self.clients.lock().unwrap();
+        if clients.contains_key(email) {
             Err(ClientError::EmailTaken(email.to_string()))
         }else{
-            self.clients.insert(
+            clients.insert(
                 email.to_string(),
                 Client::new(email.to_string(), password.to_string())
             );
@@ -88,6 +98,10 @@ impl AuctionHouse {
     }
 
     pub fn login(&self, email: &str, password :&str) -> bool {
-        self.clients.get(email).map(|c| c.password() == password).unwrap_or(false)
+        self.clients.lock().unwrap().get(email).map(|c| c.password() == password).unwrap_or(false)
+    }
+
+    pub fn profile(&self, ctl :&str) -> Option<Client> {
+        self.clients.lock().unwrap().get(ctl).cloned()
     }
 }

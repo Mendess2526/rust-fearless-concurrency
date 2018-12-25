@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static ID :AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Item {
     id :u32,
     tp :ServerType,

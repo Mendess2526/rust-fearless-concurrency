@@ -1,5 +1,5 @@
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     email :String,
     password :String,
@@ -29,4 +29,3 @@ impl Client {
         self.funds -= funds;
     }
 }
-
