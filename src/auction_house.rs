@@ -111,4 +111,24 @@ impl AuctionHouse {
     pub fn profile(&self, ctl :&str) -> Option<Client> {
         self.clients.read().unwrap().get(ctl).cloned()
     }
+
+    pub fn drop(&self, ctl :&str, id :u32) -> bool {
+        let droplet =
+        {
+            let mut reserved = self.reserved.write().unwrap();
+            match reserved.get(id) {
+                None => return false,
+                Some(d) => if d.owner() != ctl {
+                    return false
+                } else {
+                    d
+                }
+            }
+        };
+        self.stock.write().unwrap()
+            .entry(droplet.server_type())
+            .and_modify(|c| *c =+ 1)
+            .or_insert(1);
+        true
+    }
 }

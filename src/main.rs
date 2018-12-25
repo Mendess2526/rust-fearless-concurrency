@@ -110,6 +110,7 @@ enum Command {
     Ls(String),
     Buy,
     Profile(String),
+    DropServer,
 }
 
 struct CommandError(String);
@@ -120,8 +121,10 @@ impl std::fmt::Display for CommandError {
     }
 }
 
+type CommandResult = Result<Command, CommandError>;
+
 impl Command {
-    fn register(args :&[&str], ah :&Arc<AuctionHouse>) -> Result<Command, CommandError> {
+    fn register(args :&[&str], ah :&Arc<AuctionHouse>) -> CommandResult {
         if args.len() < 2 {
             Err(CommandError("Usage: register <email> <password>".into()))
         } else {
@@ -132,7 +135,7 @@ impl Command {
         }
     }
 
-    fn login(args :&[&str], ah :&Arc<AuctionHouse>) -> Result<Command, CommandError> {
+    fn login(args :&[&str], ah :&Arc<AuctionHouse>) -> CommandResult {
         if args.len() < 2 {
             Err(CommandError("Usage: login <email> <password>".into()))
         } else if ah.login(args[0], args[1]) {
@@ -144,7 +147,7 @@ impl Command {
 
     fn ls(args :&[&str],
           ah :&Arc<AuctionHouse>,
-          user :&Option<String>) -> Result<Command, CommandError> {
+          user :&Option<String>) -> CommandResult {
 
         if args.len() == 0 {
             let stock = ah.ls();
@@ -171,7 +174,7 @@ impl Command {
 
     fn buy(args :&[&str],
            ah :&Arc<AuctionHouse>,
-           user :&Option<String>) -> Result<Command, CommandError> {
+           user :&Option<String>) -> CommandResult {
 
         if user.is_none() {
             Err(CommandError("You must be logged in to use this!".into()))
@@ -194,13 +197,24 @@ impl Command {
         }
     }
 
-    fn profile(ah :&Arc<AuctionHouse>, user :&Option<String>) -> Result<Command, CommandError> {
+    fn profile(ah :&Arc<AuctionHouse>, user :&Option<String>) -> CommandResult {
         match user.as_ref() {
             None => Err(CommandError("You must be logged in to use this!".into())),
             Some(ctl) => match ah.profile(&ctl) {
                 None => unreachable!(),
                 Some(c) =>
                     Ok(Command::Profile(format!("email: {}, funds: {}", c.email(), c.funds()))),
+            }
+        }
+    }
+
+    fn drop(ah :&Arc<AuctionHouse>, user :&Option<String>, id :u32) -> CommandResult {
+        if user.is_none() { Err(CommandError("You must be logged in to use this!".into())) }
+        else {
+            if ah.drop(user.as_ref().unwrap(), id) {
+                Ok(Command::DropServer)
+            } else {
+                Err(CommandError("Invalid Server id".into()))
             }
         }
     }
