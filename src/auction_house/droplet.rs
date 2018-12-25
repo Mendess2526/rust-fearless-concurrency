@@ -1,5 +1,6 @@
 use super::client::Client;
 use super::server_type::ServerType;
+use crate::task::Task;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -10,6 +11,7 @@ pub struct Droplet {
     id :u32,
     tp :ServerType,
     owner :String,
+    time :Option<Task>,
 }
 
 impl Droplet {
@@ -18,6 +20,7 @@ impl Droplet {
             tp,
             id : ID.fetch_add(1, Ordering::SeqCst) as u32,
             owner :owner.email().to_string(),
+            time :None,
         }
     }
 
@@ -31,5 +34,13 @@ impl Droplet {
 
     pub fn server_type(&self) -> ServerType {
         self.tp
+    }
+
+    pub fn set_task(&mut self, task :Task){
+        self.time = Some(task);
+    }
+
+    pub fn delay(&self) -> Option<usize> {
+        self.time.as_ref().map(|t| t.delay())
     }
 }
