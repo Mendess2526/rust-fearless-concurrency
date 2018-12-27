@@ -221,7 +221,13 @@ impl Command {
             Some(ctl) => match ah.profile(&ctl) {
                 None => unreachable!(),
                 Some(c) =>
-                    Ok(Command::Profile(format!("email: {}, funds: {}", c.email(), c.funds()))),
+                    Ok(Command::Profile(
+                            format!("email: {}\n{}",
+                                    c.email(),
+                                    c.transactions().iter()
+                                    .fold(String::new(), |acc, x| acc + &x.to_string() + "\n")
+                                   )
+                            )),
             }
         }
     }

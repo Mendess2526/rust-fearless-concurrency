@@ -2,6 +2,7 @@ pub mod server_type;
 mod client;
 mod droplet;
 mod topbid;
+pub mod transaction;
 
 use self::client::Client;
 use self::droplet::Droplet;
@@ -70,9 +71,6 @@ impl AuctionHouse {
             return Err(AHouseError::InvalidClient(clt.into()))
         };
         let client = clients.get_mut(clt).unwrap();
-        if sv_tp.price() > client.funds() {
-            return Err(AHouseError::NotEnughFunds(sv_tp.price(), client.funds()))
-        }
         let mut stock = self.stock.write().unwrap();
         match stock.get_mut(&sv_tp) {
             None => Err(AHouseError::OutOfStock(sv_tp)),
@@ -80,7 +78,7 @@ impl AuctionHouse {
                 if *v == 0 {
                     Err(AHouseError::OutOfStock(sv_tp))
                 }else{
-                    client.spend(sv_tp.price());
+                    client.buy(sv_tp);
                     let mut reserved = self.reserved.write().unwrap();
                     let mut new_drop = Droplet::new(sv_tp, client);
                     if sv_tp == ServerType::Fast {

@@ -1,9 +1,11 @@
+use super::server_type::ServerType;
+use super::transaction::Transaction;
 
 #[derive(Debug, Clone)]
 pub struct Client {
     email :String,
     password :String,
-    funds: i32,
+    transactions :Vec<Transaction>,
 }
 
 impl Client {
@@ -11,7 +13,7 @@ impl Client {
         Client {
             email,
             password,
-            funds: 100,
+            transactions: vec![],
         }
     }
 
@@ -21,11 +23,16 @@ impl Client {
     pub fn password(&self) -> &str {
         &self.password
     }
-    pub fn funds(&self) -> i32 {
-        self.funds
+
+    pub fn transactions(&self) -> &[Transaction] {
+        &self.transactions
     }
 
-    pub fn spend(&mut self, funds :i32) {
-        self.funds -= funds;
+    pub fn buy(&mut self, server_type :ServerType) {
+        self.transactions.push(Transaction::new_purchase(server_type));
+    }
+
+    pub fn auction(&mut self, server_type :ServerType, value :i32){
+        self.transactions.push(Transaction::new_auction(server_type, value));
     }
 }
