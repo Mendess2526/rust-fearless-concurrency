@@ -15,7 +15,7 @@ use std::sync::Weak;
 use std::collections::HashMap;
 
 type Stock = HashMap<ServerType, u32>;
-type Auctions = HashMap<String, TopBid>;
+type Auctions = HashMap<u32, TopBid>;
 type Reservations = HashMap<u32, Droplet>;
 type Clients = HashMap<String, Client>;
 
@@ -28,15 +28,19 @@ pub struct AuctionHouse {
 }
 
 #[derive(Debug)]
-pub enum AuctionError {
+pub enum AHouseError {
     OutOfStock(ServerType),
     NotEnughFunds(i32, i32),
     InvalidClient(String),
+    EmailTaken(String),
+    LockError(String),
+    InvalidAuction(u32),
 }
 
-#[derive(Debug)]
-pub enum ClientError {
-    EmailTaken(String),
+impl<T> From<std::sync::PoisonError<T>> for AHouseError {
+    fn from(error :std::sync::PoisonError<T>) -> Self {
+        AHouseError::LockError(format!("{:?}", error))
+    }
 }
 
 impl AuctionHouse {
@@ -60,21 +64,21 @@ impl AuctionHouse {
         self.reserved.read().unwrap().values().filter(|d| d.owner() == clt).cloned().collect()
     }
 
-    pub fn buy(&self, sv_tp :ServerType, clt :&str) -> Result<(), AuctionError> {
+    pub fn buy(&self, sv_tp :ServerType, clt :&str) -> Result<(), AHouseError> {
         let mut clients = self.clients.write().unwrap();
         if !clients.contains_key(clt) {
-            return Err(AuctionError::InvalidClient(clt.into()))
+            return Err(AHouseError::InvalidClient(clt.into()))
         };
         let client = clients.get_mut(clt).unwrap();
         if sv_tp.price() > client.funds() {
-            return Err(AuctionError::NotEnughFunds(sv_tp.price(), client.funds()))
+            return Err(AHouseError::NotEnughFunds(sv_tp.price(), client.funds()))
         }
         let mut stock = self.stock.write().unwrap();
         match stock.get_mut(&sv_tp) {
-            None => Err(AuctionError::OutOfStock(sv_tp)),
+            None => Err(AHouseError::OutOfStock(sv_tp)),
             Some(v) => {
                 if *v == 0 {
-                    Err(AuctionError::OutOfStock(sv_tp))
+                    Err(AHouseError::OutOfStock(sv_tp))
                 }else{
                     client.spend(sv_tp.price());
                     let mut reserved = self.reserved.write().unwrap();
@@ -105,10 +109,10 @@ impl AuctionHouse {
             .or_insert(1);
     }
 
-    pub fn register(&self, email :&str, password :&str) -> Result<(), ClientError> {
+    pub fn register(&self, email :&str, password :&str) -> Result<(), AHouseError> {
         let mut clients = self.clients.write().unwrap();
         if clients.contains_key(email) {
-            Err(ClientError::EmailTaken(email.to_string()))
+            Err(AHouseError::EmailTaken(email.to_string()))
         }else{
             clients.insert( email.to_string(),
             Client::new(email.to_string(), password.to_string())
@@ -125,15 +129,14 @@ impl AuctionHouse {
         self.clients.read().unwrap().get(ctl).cloned()
     }
 
-    pub fn drop_server(&self, ctl :&str, id :u32) -> bool {
+    pub fn drop_server(&self, ctl :&str, id :u32) -> bool { // TODO: make this transactional
         let droplet =
         {
             let mut reserved = self.reserved.write().unwrap();
             if !reserved.contains_key(&id) || reserved[&id].owner() != ctl {
                 return false
-            } else {
-                reserved.remove(&id).unwrap()
             }
+            reserved.remove(&id).unwrap()
         };
         self.stock.write().unwrap()
             .entry(droplet.server_type())
@@ -142,7 +145,33 @@ impl AuctionHouse {
         true
     }
 
+    pub fn start_bid(&self, ctl :&str, sv_tp :ServerType, value :i32) -> Result<u32,AHouseError> {
+        let clients = self.clients.read()?;
+        let mut auctions = self.auctions.write()?;
+        let client = match clients.get(ctl) {
+            None => return Err(AHouseError::InvalidClient(ctl.into())),
+            Some(c) => c,
+        };
+        let auction = TopBid::new(sv_tp, client, value);
+        let id = auction.id();
+        auctions.insert(id, auction);
+        Ok(id)
+    }
+
+    pub fn bid(&self, ctl :&str, id :u32, value :i32) -> Result<bool, AHouseError> {
+        let clients = self.clients.read()?;
+        let mut auctions = self.auctions.write()?;
+        let client = match clients.get(ctl) {
+            None => return Err(AHouseError::InvalidClient(ctl.into())),
+            Some(c) => c,
+        };
+        auctions.get_mut(&id)
+            .map(|b| Ok(b.bid(value, client)))
+            .unwrap_or(Err(AHouseError::InvalidAuction(id)))
+    }
+
 }
+
 fn drop_server_unchecked(
     reserved :Weak<RwLock<Reservations>>,
     stock :Weak<RwLock<Stock>>,
@@ -158,5 +187,20 @@ fn drop_server_unchecked(
         .entry(droplet.server_type())
         .and_modify(|c| *c += 1)
         .or_insert(1);
+    Some(())
+}
+
+fn end_bid(
+    auctions :Weak<RwLock<Reservations>>,
+    stock :Weak<RwLock<Stock>>,
+    clients :Weak<RwLock<Clients>>,
+    id :u32) -> Option<()> {
+
+    let auctions = auctions.upgrade()?;
+    let stock    = stock   .upgrade()?;
+    let clients  = clients .upgrade()?;
+    let auctions = auctions.write().unwrap();
+    let stock    = stock   .write().unwrap();
+    let clients  = clients .write().unwrap();
     Some(())
 }

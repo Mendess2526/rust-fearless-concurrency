@@ -1,7 +1,7 @@
 mod auction_house;
 mod task;
 
-use crate::auction_house::{AuctionHouse, ClientError, server_type::ServerType};
+use crate::auction_house::{AuctionHouse, AHouseError, server_type::ServerType};
 
 use std::io::{self, Read, Write};
 use std::str::FromStr;
@@ -137,7 +137,9 @@ impl Command {
         } else {
             match ah.register(args[0], args[1]){
                 Ok(()) => Ok(Command::Register),
-                Err(ClientError::EmailTaken(s)) => Err(CommandError(format!("Email Taken: {}", s))),
+                Err(AHouseError::EmailTaken(s)) =>
+                    Err(CommandError(format!("Email Taken: {}", s))),
+                Err(_) => unreachable!(),
             }
         }
     }
@@ -201,13 +203,14 @@ impl Command {
                 return Err(CommandError("Invalid server type!".into()));
             }
             let st = maybe_st.unwrap();
-            use crate::auction_house::AuctionError::*;
+            use crate::auction_house::AHouseError::*;
             match ah.buy(st, &user.as_ref().unwrap()) {
                 Err(InvalidClient(_)) => unreachable!(),
                 Err(OutOfStock(_)) => Err(CommandError("Out of stock".into())),
                 Err(NotEnughFunds(p,f)) =>
                     Err(CommandError(format!("not enough funds: Price {}, Funds: {}", p, f))),
                 Ok(()) => Ok(Command::Buy),
+                _ => unreachable!(),
             }
         }
     }
