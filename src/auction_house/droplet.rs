@@ -1,6 +1,5 @@
 use super::client::Client;
 use super::server_type::ServerType;
-use crate::task::Task;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -11,16 +10,25 @@ pub struct Droplet {
     id :u32,
     tp :ServerType,
     owner :String,
-    time :Option<Task>,
+    value :i32,
 }
 
 impl Droplet {
-    pub fn new(tp :ServerType, owner :&Client) -> Self {
+    pub fn new_reserved(tp :ServerType, owner :&str) -> Self {
         Droplet {
             tp,
-            id : ID.fetch_add(1, Ordering::SeqCst) as u32,
-            owner :owner.email().to_string(),
-            time :None,
+            id: ID.fetch_add(1, Ordering::SeqCst) as u32,
+            owner: owner.to_string(),
+            value: tp.price(),
+        }
+    }
+
+    pub fn new_auctioned(tp :ServerType, owner :&str, value :i32) -> Self {
+        Droplet {
+            tp,
+            id: ID.fetch_add(1, Ordering::SeqCst) as u32,
+            owner: owner.to_string(),
+            value: value,
         }
     }
 
@@ -36,11 +44,4 @@ impl Droplet {
         self.tp
     }
 
-    pub fn set_task(&mut self, task :Task){
-        self.time = Some(task);
-    }
-
-    pub fn delay(&self) -> Option<usize> {
-        self.time.as_ref().map(|t| t.delay())
-    }
 }

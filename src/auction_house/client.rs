@@ -1,11 +1,7 @@
-use super::server_type::ServerType;
-use super::transaction::Transaction;
-
 #[derive(Debug, Clone)]
 pub struct Client {
     email :String,
     password :String,
-    transactions :Vec<Transaction>,
 }
 
 impl Client {
@@ -13,7 +9,6 @@ impl Client {
         Client {
             email,
             password,
-            transactions: vec![],
         }
     }
 
@@ -22,17 +17,5 @@ impl Client {
     }
     pub fn password(&self) -> &str {
         &self.password
-    }
-
-    pub fn transactions(&self) -> &[Transaction] {
-        &self.transactions
-    }
-
-    pub fn buy(&mut self, server_type :ServerType) {
-        self.transactions.push(Transaction::new_purchase(server_type));
-    }
-
-    pub fn auction(&mut self, server_type :ServerType, value :i32){
-        self.transactions.push(Transaction::new_auction(server_type, value));
     }
 }
