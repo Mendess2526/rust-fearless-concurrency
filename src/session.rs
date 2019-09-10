@@ -166,7 +166,6 @@ impl Session {
     }
 
     fn ls(&self, args :&[&str]) -> CommandResult {
-
         if args.len() == 0 {
             let stock = self.ah.ls();
             let mut result = String::from_str("Type\tAmount in stock\n=======================\n")

@@ -12,11 +12,14 @@ pub struct Auction {
     callback :Task
 }
 
-pub struct BidError;
+pub enum BidError {
+    BidTooLow(i32),
+    LockError,
+}
 
 impl<T> From<std::sync::PoisonError<T>> for BidError {
-    fn from(_ :std::sync::PoisonError<T>) -> Self {
-        BidError
+    fn from(e :std::sync::PoisonError<T>) -> Self {
+        BidError::LockError(format!("{:?}", e))
     }
 }
 
@@ -40,8 +43,9 @@ impl Auction {
         }
 
     pub fn bid(&mut self, bid :Bid) -> Result<(), BidError> {
-        if self.bids.read()?.peek().unwrap() > &bid {
-            Err(BidError)
+        let top_bid = self.bids.read()?.peek().unwrap();
+        if top_bid > &bid {
+            Err(BidError::BidTooLow(top_bid.value()))
         } else {
             self.bids.write()?.push(bid);
             Ok(())

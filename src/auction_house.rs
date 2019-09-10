@@ -21,7 +21,15 @@ pub enum AHouseError {
     InvalidClient(String),
     EmailTaken(String),
     LockError(String),
-    BidTooLow,
+    BidTooLow(i32),
+    QueueInterrupted,
+}
+
+pub enum AuctionKind {
+    TimedStarted,
+    TimedRebided,
+    QueueDroppped,
+    QueueGranted,
 }
 
 impl<T> From<std::sync::PoisonError<T>> for AHouseError {
@@ -31,14 +39,20 @@ impl<T> From<std::sync::PoisonError<T>> for AHouseError {
 }
 
 impl From<self::auction::BidError> for AHouseError {
-    fn from(_error :self::auction::BidError) -> Self {
-        AHouseError::BidTooLow
+    fn from(error :self::auction::BidError) -> Self {
+        use self::auction::BidError;
+        match error {
+            BidError::BidTooLow(b) => AHouseError::BidTooLow(b),
+            BidError::LockError(e) => AHouseError::LockError(e),
+        }
     }
 }
+
 #[derive(Debug)]
 pub struct AuctionHouse {
     stock           :RwLock<HashMap<ServerType, u32>>,
     auctions        :RwLock<HashMap<ServerType, Auction>>,
+    queues          :RwLock<HashMap<ServerType, UniqueBidQueue>,
     reserved_a      :RwLock<HashMap<u32,        Droplet>>,
     reserved_d      :RwLock<HashMap<u32,        Droplet>>,
     clients         :RwLock<HashMap<String,     Client>>,
@@ -46,10 +60,11 @@ pub struct AuctionHouse {
 }
 
 impl AuctionHouse {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         AuctionHouse {
             stock :RwLock::new(HashMap::new()),
             auctions :RwLock::new(HashMap::new()),
+            queues :RwLock::new(HashMap::new()),
             reserved_a :RwLock::new(HashMap::new()),
             reserved_d :RwLock::new(HashMap::new()),
             clients :RwLock::new(HashMap::new()),
@@ -147,24 +162,29 @@ impl AuctionHouse {
     pub fn auction(
         ah :Arc<AuctionHouse>,
         server_type :ServerType,
-        bid :Bid,
-        id :usize) -> Result<(),AHouseError> {
+        bid :Bid) -> Result<AuctionKind,AHouseError> {
 
-        let mut auctions = ah.auctions.write()?;
-        match auctions.get_mut(&server_type) {
-            Some(a) => a.bid(bid).map_err(AHouseError::from),
-            None => {
-                let ah_arc = Arc::clone(&ah);
-                auctions.insert(
-                    server_type,
-                    Auction::new(
+        let stock = ah.stock.write()?;
+        debug_assert!(stock.get(&server_type).is_some());
+        if stock.get(&server_type).unwrap().load() == 0 {
+            ah.queues.write()?.entry(server_type).or_insert(UniqueBidQueue::new())
+                .enqueue(bid)
+                .map(AuctionKind::from) //TODO
+                .map_err(AHouseError::QueueInterrupted)
+        } else {
+            let auctions = ah.auctions.write()?;
+            match auctions.get_mut(&server_type) {
+                None => {
+                    stock.get(&server_type).fetch_sub(1);
+                    let ah_arc = Arc::clone(&ah);
+                    auctions.insert(
                         server_type,
-                        bid,
-                        move |bid| {buy_auctioned(ah_arc, server_type, bid);}
-                        )
-                    );
-                Ok(())
-            },
+                        Auction::new(st, bid, |b| ah_arc.buy_auctioned(server_type, b))
+                        );
+                    AuctionKind::TimedStarted
+                },
+                Some(a) => { a.bid(bid); AuctionKind::TimedRebided },
+            }
         }
     }
 }
